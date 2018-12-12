@@ -1,0 +1,375 @@
+# import competitors_parser.spiders.allo as allo
+from competitors_parser.spiders.allo import *
+import competitors_parser.pipelines as piplines
+import unittest
+import scrapy
+import requests
+import datetime
+import pytz
+from types import GeneratorType
+
+
+def get_response(url) -> scrapy.http.Response:
+    return scrapy.http.TextResponse(url=url, request=scrapy.Request(url=url), body=requests.get(url).content, encoding='utf-8')
+def get_resp(request) -> scrapy.http.Response:
+    print('3', type(request), request)
+    url = request.url
+    return scrapy.http.TextResponse(url=url, request=scrapy.Request(url=url), body=requests.get(url).content, encoding='utf-8')
+
+class AlloTest(unittest.TestCase):
+    @unittest.skip('')
+    def test_reorder_page(self):
+        url = 'https://allo.ua/ru/koronki-dlja-sverlenija/'
+        req = get_response(url=url)
+        req.meta[Names.CAT_TREE_KEY] = ['test']
+        for res in AlloSpider().parse(req):
+            print(res)
+
+    @unittest.skip('')
+    def test_page_type(self):
+        page_list = [{'url': 'https://allo.ua/ru/planshety-i-gadzhety/',
+                      'page_type': PageType.CATALOG},
+                     {'url': 'https://allo.ua/ru/products/mobile/serija_smartfony-apple_iphone_6-or-apple_iphone_8_plus/',
+                      'page_type': PageType.PRODUCTS},
+                     {'url': 'https://allo.ua/ru/products/mobile/samsung-galaxy-note-8.html',
+                      'page_type': PageType.GOOD},
+                     {'url': 'https://allo.ua/ru/products/mobile/xiaomi-redmi-5-2-16-blue.html',
+                      'page_type': PageType.GOOD},
+                     {'url': 'https://allo.ua/ru/allo_service/allo-garant',
+                      'page_type': PageType.OTHER},
+                     {'url': 'https://allo.ua/ru/shtatnyj-ksenon/',
+                      'page_type': PageType.NO_GOODS},
+                     {'url': 'https://catalogs.lego.com/BrandCatalog/2hy2018/reemea/UA',
+                      'page_type': PageType.OTHER},
+                     {'url': 'https://allo.ua/ru/apple-store/',
+                      'page_type': PageType.OTHER},
+                     {'url': 'https://allo.ua/ru/xiaomi-store/',
+                      'page_type': PageType.OTHER},
+                     {'url': 'https://allo.ua/blackfr1day-2018/start/',
+                      'page_type': PageType.OTHER},
+                     {'url': 'https://allo.ua/ru/smart-chasy/p-6/serija_smart_chasy-samsung_galaxy_gear_s/',
+                      'page_type': PageType.PRODUCTS},
+                     {'url': 'https://allo.ua/ru/jelektricheskie-zubnye-schetki/',
+                      'page_type': PageType.PRODUCTS},
+                     {'url': 'https://allo.ua/ru/kompakty/',
+                      'page_type': PageType.PRODUCTS}
+        ]
+        for page in page_list:
+            self.assertEqual(AlloSpider.get_page_type(get_response(url=page['url'])), page['page_type'])
+
+    @unittest.skip('')
+    def test_parse_subpage(self):
+        url = 'https://allo.ua/ru/planshety-i-gadzhety/'
+        resp = get_response(url=url)
+        resp.meta[Names.CAT_TREE_KEY] = [AlloSpider.cat_2_exceptions[0]]
+        self.assertEqual(AlloSpider().parse(resp), None, 'method did process page with exception')
+
+        url = 'https://allo.ua/ru/shtatnyj-ksenon/'
+        resp = get_response(url=url)
+        resp.meta[Names.CAT_TREE_KEY] = ['not relevant']
+        self.assertEqual(AlloSpider().parse(resp), None, 'method did process empty page')
+
+        url = 'https://allo.ua/ru/allo_service/allo-garant'
+        resp = get_response(url=url)
+        resp.meta[Names.CAT_TREE_KEY] = ['not relevant']
+        self.assertEqual(AlloSpider().parse(resp), None, 'method did process unknown type page')
+
+    @unittest.skip('')
+    def test_teplotechnika(self):
+        url = 'https://allo.ua/ru/golovki-nabory-golovok/'
+        resp = get_response(url=url)
+        resp.meta[Names.CAT_TREE_KEY] = ['Смартфоны и телефоны']
+        result = list(map(lambda request: request.meta.get('result'),
+                          AlloSpider().parse(resp)))
+        for x in result[0]:
+            print(x['item loader'].load_item())
+
+    @unittest.skip('')
+    def test_catalog_phones(self):
+        url = 'https://allo.ua/ru/mobilnye-telefony-i-sredstva-svyazi/'
+        resp = get_response(url=url)
+        resp.meta[Names.CAT_TREE_KEY] = ['Смартфоны и телефоны']
+        result = list(map(lambda request: {'url': request.url, 'cat_tree': request.meta[Names.CAT_TREE_KEY]}, AlloSpider().parse(resp)))
+        for x in result:
+            print(x)
+        self.assertEqual(len(result), 100, 'incorrent count of parsed items. Expected 11 got ' + str(len(result)) + '   Url ' + url)
+        check_items = [{'url': 'https://allo.ua/products/mobile/serija_smartfony-samsung_galaxy_note_9_2018/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны', 'Популярное', 'Samsung Galaxy Note 9']},
+                       {'url': 'https://allo.ua/ru/products/mobile/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны']},
+                       {'url': 'https://allo.ua/ru/products/mobile/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны']},
+                       {'url': 'https://allo.ua/ru/products/mobile/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны', 'Все товары']},
+                       {'url': 'https://allo.ua/ru/aksessuary-k-mobilnym-telefonam/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Аксессуары']},
+                       {'url': 'https://allo.ua/ru/aksessuary-k-mobilnym-telefonam/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Аксессуары', 'Все аксессуары']},
+                       {'url': 'https://allo.ua/ru/plenki-i-stekla-smartfonu/',
+                        'cat_tree': ['Смартфоны и телефоны', 'Аксессуары', 'Защитные стекла и пленки']}]
+        for item in check_items:
+            self.assertIn(item, result)
+
+    @unittest.skip('')
+    def test_catalog_exceptions(self):
+        items = [{'url': 'https://allo.ua/ru/aksessuary-k-mobilnym-telefonam/', 'cat_tree': ['Смартфоны и телефоны', 'Аксессуары'], 'length': 79, 'check_items':[]},
+
+                  {'url': 'https://allo.ua/ru/aksessuary-k-kompyuteram-i-noutbukam/', 'cat_tree': ['Планшеты, ноутбуки и ПК', 'Аксессуары для ноутбуков и ПК'], 'length': 110, 'check_items':[]},
+
+                 {'url': 'https://allo.ua/ru/chasy-i-ukrashenija/', 'cat_tree': ['Парфюмерия, косметика, часы'], 'length': 43, 'check_items':
+                               [{'url': 'https://allo.ua/ru/podarki-i-suveniry/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Подарки и сувениры']},
+                               {'url': 'https://allo.ua/ru/podarki-i-suveniry/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Подарки и сувениры', 'Все товары']},
+                               {'url': 'https://allo.ua/ru/suveniry/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Подарки и сувениры', 'Сувениры']},
+                                {'url': 'https://allo.ua/ru/muzhskaja-obuv/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Обувь', 'Обувь для мужчин']},
+                                {'url': 'https://allo.ua/ru/zhenskie-aksessuary/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Аксессуары', 'Аксессуары для женщин']},
+                                {'url': 'https://allo.ua/ru/zonty-umbrella/', 'cat_tree': ['Парфюмерия, косметика, часы', 'Зонты']}]},
+
+
+                 {'url': 'https://allo.ua/ru/progulka-i-otduh/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых'], 'length': 81, 'check_items':
+                  [{'url': 'https://allo.ua/ru/girobordy/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Гироборды']},
+                   {'url': 'https://allo.ua/ru/girobordy/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Гироборды', 'Все товары']},
+                   {'url': 'https://allo.ua/ru/girobordy/diametr_koles_girobordy-10/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Гироборды', '10"']},
+                   {'url': 'https://allo.ua/ru/detskie-jelektromobili/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Детские электро- и веломобили']},
+                   {'url': 'https://allo.ua/ru/detskie-jelektromobili/tip_kuzova_detskie_mobili-avtomobil/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Детские электро- и веломобили', 'Тип кузова', 'Автомобиль']},
+                   {'url': 'https://allo.ua/ru/detskie-jelektromobili/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Детские электро- и веломобили', 'Все товары']},
+                   {'url': 'https://allo.ua/ru/detskie-jelektromobili/privod_detskie_mobili-pedalnyj/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Детские электро- и веломобили', 'Привод', 'Педальный']},
+                   {'url': 'https://allo.ua/ru/samokaty/kolichestvo_koles_begovel-2/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Cамокаты', 'Количество колес', '2-х колесные']},
+                   {'url': 'https://allo.ua/ru/samokaty/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Cамокаты', 'Все товары']},
+                   {'url': 'https://allo.ua/ru/radioupravljaemye-modeli/klass_radiomodeli-geksakoptery-or-kvadrokoptery/', 'cat_tree': ['Детские товары', 'Прогулка и активный отдых', 'Квадрокоптеры и гексакоптеры']}]},
+
+                 {'url': 'https://allo.ua/ru/lego/', 'cat_tree': ['Детские товары', 'LEGO'], 'length': 33, 'check_items':
+                  [{'url': 'https://allo.ua/ru/konstruktory-lego/', 'cat_tree': ['Детские товары', 'LEGO', 'Все товары']},
+                   {'url': 'https://allo.ua/ru/konstruktory-lego/proizvoditel-lego/', 'cat_tree': ['Детские товары', 'LEGO', 'Топ продаж']},
+                   {'url': 'https://allo.ua/ru/konstruktory-lego/proizvoditel-lego/tip_lego-lego_minifigures/', 'cat_tree': ['Детские товары', 'LEGO', 'LEGO Minifigures']},
+                   {'url': 'https://allo.ua/ru/konstruktory-lego/proizvoditel-lego/vozrast_lego-ot_1_5_let-or-ot_1_goda-or-ot_2_let/', 'cat_tree': ['Детские товары', 'LEGO', 'До 3 лет']}]
+                  }]
+        for item in items:
+            url, cat_tree, length, check_items = item.values()
+            print(item.values())
+            print(url, cat_tree, length, check_items)
+            resp = get_response(url=url)
+            resp.meta[Names.CAT_TREE_KEY] = cat_tree
+            result = list(map(lambda request: {'url': request.url, 'cat_tree': request.meta[Names.CAT_TREE_KEY]}, AlloSpider().parse(resp)))
+            for x in result:
+                print(x)
+            self.assertEqual(len(result), length, 'incorrent count of parsed items. Expected ' + str(length) + ' got ' + str(len(result)) + '   Url ' + url)
+            for check_item in check_items:
+                self.assertIn(check_item, result)
+
+    @unittest.skip('')
+    def test_main(self):
+        url = 'https://allo.ua/ru'
+        result = list(AlloSpider().parse_main(get_response(url=url)))
+
+        self.assertEqual(len(result), 13, 'incorrect count of parsed top level categories')
+        categories = list(map(lambda res: res.meta.get(Names.CAT_TREE_KEY)[0], result))
+        urls = list(map(lambda res: res.url, result))
+
+        self.assertIn('Смартфоны и телефоны', categories, 'Смартфоны not parsed')
+        self.assertIn('https://allo.ua/ru/mobilnye-telefony-i-sredstva-svyazi/', urls, 'Смартфоны urls not parsed')
+
+        self.assertIn('Бытовая техника', categories, 'Бытовая техника not parsed')
+        self.assertIn('https://allo.ua/ru/bytovaya-tehnika/', urls, 'Бытовая техника urls not parsed')
+
+        self.assertNotIn('Apple', categories, 'Apple parsed!')
+
+    @unittest.skip('')
+    def test_page_load(self):
+        self.maxDiff = None
+        test_items = [{'url': 'https://allo.ua/ru/products/mobile/samsung-galaxy-note-8.html',
+                       'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны', 'Samsung Galaxy Note 8'],
+                       'result': {'name': 'Samsung Galaxy Note 8',
+                            'price': 25999,
+                            'old_price': 29999,
+                            'delivery_method': 'Пикап',
+                            'status': 'Купить',
+                            'reviews_count': 12,
+                            'rating': 5.0,
+                            'url': 'https://allo.ua/ru/products/mobile/samsung-galaxy-note-8.html',
+                            'cat_1': 'Смартфоны и телефоны',
+                            'cat_2': 'Смартфоны и мобильные телефоны',
+                            'cat_3': 'Samsung Galaxy Note 8',
+                            'site_id': '324713'
+                            }},
+            {'url': 'https://allo.ua/ru/products/mobile/huawei-p20-lite-blue.html', 'cat_tree': ['Смартфоны и телефоны', 'Смартфоны и мобильные телефоны', 'Xiaomi'],
+             'result': {'name': 'Huawei P20 Lite Blue',
+                            'price': 8799,
+                            'old_price': 11999,
+                            'delivery_method': 'Пикап и доставка',
+                            'actions': 'Акция',
+                            'status': 'Купить',
+                            'reviews_count': 17,
+                            'rating': 4.5,
+                            'url': 'https://allo.ua/ru/products/mobile/huawei-p20-lite-blue.html',
+                            'cat_1': 'Смартфоны и телефоны',
+                            'cat_2': 'Смартфоны и мобильные телефоны',
+                            'cat_3': 'Xiaomi',
+                            'site_id': '356269'
+                            }},
+            {'url': 'https://allo.ua/ru/odejala/ideia-wool-premium-200h220-4820182656699.html', 'cat_tree': ['a','b','c','d','e','f'],
+             'result': {'name': 'Одеяла IDEIA Wool Premium 200х220 (4820182656699)',
+                        'price': 3157,
+                        'status': 'Купить',
+                        'url': 'https://allo.ua/ru/odejala/ideia-wool-premium-200h220-4820182656699.html',
+                        'site_id': '434617',
+                        'delivery_method': 'Доставка',
+                        'actions': 'Рассрочка https://i.allo.ua/media/credit_icons/58dd0edabd4bd_1.png',
+                        'cat_1': 'a',
+                        'cat_2': 'b',
+                        'cat_3': 'c',
+                        'cat_4': 'd | e | f'
+                        }},
+            {'url': 'https://allo.ua/ru/smart-chasy/apple-watch-series-4-44mm.html', 'cat_tree': ['a','b','c','d','e','f'],
+             'result': {'name': 'Apple Watch Series 4 44mm Space Grey',
+                        'price': 15999,
+                        'status': 'Предзаказ',
+                        'url': 'https://allo.ua/ru/smart-chasy/apple-watch-series-4-44mm.html',
+                        'site_id': '406097',
+                        'actions': 'Рассрочка https://i.allo.ua/media/credit_icons/58dd0edabd4bd_12.png',
+                        'reviews_count': 5,
+                        'rating': 5.0,
+                        'cat_1': 'a',
+                        'cat_2': 'b',
+                        'cat_3': 'c',
+                        'cat_4': 'd | e | f'
+                        }},
+                      {'url': 'https://allo.ua/ru/smart-chasy/samsung-gear-s3-frontier-space-grey-u1.html',
+                       'cat_tree': ['Гаджеты и электротранспорт', 'Смарт-часы', 'Все товары', 'abc', 'tbd'],
+                       'result': {'name': 'Смарт-часы Samsung Gear S3 Frontier Space Grey (У1)',
+                                  'price': 7999,
+                                  'delivery_method': 'Пикап',
+                                  'actions': 'Уценка',
+                                  'status': 'Купить',
+                                  'reviews_count': 1,
+                                  'rating': 5.0,
+                                  'url': 'https://allo.ua/ru/smart-chasy/samsung-gear-s3-frontier-space-grey-u1.html',
+                                  'cat_1': 'Гаджеты и электротранспорт',
+                                  'cat_2': 'Смарт-часы',
+                                  'cat_3': 'Все товары',
+                                  'cat_4': 'abc | tbd',
+                                  'site_id': '309857'
+                                  }},
+                      {'url': 'https://allo.ua/ru/detskie-koljaski/universal-naja-2-v-1-babyzen-yoyo-plus-taupe-white-0-taupe-white.html',
+                       'cat_tree': ['Гаджеты и электротранспорт', 'Смарт-часы', 'Все товары', 'abc', 'tbd'],
+                       'result': {'name': 'Детская коляска универсальная 2 в 1 BabyZen Yoyo Plus Taupe/White (0 /taupe/white)',
+                                  'price': 19490,
+                                  'delivery_method': 'Доставка',
+                                  'status': 'Купить',
+                                  'url': 'https://allo.ua/ru/detskie-koljaski/universal-naja-2-v-1-babyzen-yoyo-plus-taupe-white-0-taupe-white.html',
+                                  'cat_1': 'Гаджеты и электротранспорт',
+                                  'cat_2': 'Смарт-часы',
+                                  'cat_3': 'Все товары',
+                                  'cat_4': 'abc | tbd',
+                                  'site_id': '0 /taupe/white-0036'
+                                  }}
+                 ]
+        for item in test_items:
+            url, cat_tree, expected_result = item.values()
+            print('\nParsing', url)
+            resp = get_response(url=url)
+            resp.meta[Names.CAT_TREE_KEY] = cat_tree
+            result = AlloSpider().parse(resp)
+            while (not isinstance(result, items.AlloPageProduct)) and (not isinstance(result, items.AlloLoader)):
+                if isinstance(result, scrapy.http.request.Request):
+                    req = result
+                else:
+                    print(type(result))
+                    req = list(result)
+                    if len(req) == 0:
+                        break
+                    else:
+                        req = req[0]
+                resp = get_resp(req)
+                for k, v in dict(req.meta).items():
+                    resp.meta[k] = v
+                result = req.callback(resp)
+                if isinstance(result, GeneratorType):
+                    result = list(result)
+                    if len(result) > 1:
+                        raise ValueError('incorrect item')
+                    else:
+                        result = result[0]
+                print(type(result))
+            print(result)
+            self.assertGreater(len(result['attributes']), 10)
+            # print(result['actions'])
+            result.pop('attributes')
+            self.assertEqual(expected_result, dict(result))
+
+    @unittest.skip('')
+    def test_parse_catalog(self):
+        # url = 'https://allo.ua/ru/smart-chasy/proizvoditel-samsung/'
+        # url = 'https://allo.ua/ru/products/mobile/proizvoditel-huawei/'
+        # url = 'https://allo.ua/ru/products/mobile/serija_smartfony-samsung_galaxy_s9_plus/'
+        test_set = [{'url': 'https://allo.ua/ru/girobordy/p-2/', 'result': [
+            {'name': 'Гироборд HX X1 Luxury 8 Red',
+             'site_id': 'HXX18LR-0147',
+             'delivery_method': 'Доставка',
+             'status': 'Купить',
+             'url': 'https://allo.ua/ru/girobordy/hx-x1-luxury-8-red.html',
+             'price': 6749,
+             'attributes': 'Назначение: Для взрослых;Диаметр колес: 8";Максимальная скорость: 20 км/ч;Максимальная нагрузка: 130 кг;Особенности: Водонепроницаемость;Мощность двигателя: 2 x 500 Вт;',
+             'cat_1': 'Гаджеты и электротранспорт',
+             'cat_2': 'Смарт-часы',
+             'cat_3': 'Samsung',
+             'cat_4': 'a | b'}]},
+            {'url': 'https://allo.ua/ru/vodonagrevateli-kosvennogo-nagreva/objem_kosvennye_vodonagrevateli-bolee_300_l/', 'result': [
+            {'name': 'Drazice OKC 500 NTR/HP',
+             'site_id': '269427',
+             'delivery_method': 'Пикап и доставка',
+             'status': 'Купить',
+             'actions': 'Рассрочка https://i.allo.ua/media/credit_icons/58dd0edabd4bd_1.png',
+             'url': 'https://allo.ua/ru/vodonagrevateli-kosvennogo-nagreva/drazice-okc-500-ntr-hp.html',
+             'price': 36694,
+             'attributes': 'Объем: 469 л;Электрический ТЭН: Отдельно;Тип установки: Напольный;Вес, кг: 223 кг;Страна производитель: Чехия;',
+             'cat_1': 'Гаджеты и электротранспорт',
+             'cat_2': 'Смарт-часы',
+             'cat_3': 'Samsung',
+             'cat_4': 'a | b'}]},
+                    {'url': 'https://allo.ua/ru/detskie-koljaski/proizvoditel-babyzen/', 'result': [
+                        {'name': 'Детская коляска универсальная 2 в 1 BabyZen Yoyo Plus Red/White (0 /red/white)',
+                         'site_id': '0 /red/white-0036',
+                         'delivery_method': 'Доставка',
+                         'status': 'Купить',
+                         'url': 'https://allo.ua/ru/detskie-koljaski/universal-naja-2-v-1-babyzen-yoyo-plus-red-white-0-red-white.html',
+                         'price': 19490,
+                         'attributes': 'Тип: Универсальные (2в1);Вес: 6.6 кг;Колеса: Полиуретан;По возрасту ребенка: до 3 лет;Механизм складывания: Книжка;Ширина шасси, см: 44;',
+                         'cat_1': 'Гаджеты и электротранспорт',
+                         'cat_2': 'Смарт-часы',
+                         'cat_3': 'Samsung',
+                         'cat_4': 'a | b'}]}]
+        for data in test_set:
+            url, result = data['url'], data['result']
+            resp = get_response(url)
+            resp.meta[Names.CAT_TREE_KEY] = ['Гаджеты и электротранспорт', 'Смарт-часы', 'Samsung', 'a', 'b']
+            gener = AlloSpider().parse(resp)
+
+            req = next(gener)
+            for item in gener:
+                print('gen items', item)
+
+            resp = get_resp(req)
+            for k, v in dict(req.meta).items():
+                resp.meta[k] = v
+            items = list(req.callback(resp))
+            it = items[1]
+            for key, value in result[0].items():
+                print(key, value, value == it[key], it[key])
+            for res in result:
+                self.assertIn(res, items)
+            for item in items:
+                print(item)
+
+    # @unittest.skip('')
+    def test_upload_db(self):
+        pipeline = piplines.AlloPipeline()
+        pipeline.time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
+        pipeline.spider = AlloSpider()
+        with open('result.json', 'r') as f:
+            pipeline.result = json.loads(f.read())
+        # pipeline.result = pipeline.result[:10]
+        pipeline.upload_to_DB(is_test=False)
+
+
+if __name__ == '__main__':
+    unittest.main()
